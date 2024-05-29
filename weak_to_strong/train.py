@@ -275,7 +275,7 @@ def train_and_save_model(
             print("saved", save_path)
 
     inference_results = None
-    if inference_ds:
+    if inference_ds and not already_trained:
         inference_results = eval_model_acc(model, inference_ds, eval_batch_size)
         logger.logkv("inference_accuracy", np.mean([r["acc"] for r in inference_results]))
 
