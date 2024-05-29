@@ -271,10 +271,11 @@ def main(
         weak_model_config = json.load(open(weak_labels_path.replace("weak_labels", "config_w2sg.json")))
         # mix in strong labels at the desired fraction
         if strong_label_fraction > 0:
+            n_strong, n_weak = int(len(train1_ds) * (1 - strong_label_fraction)), int(len(train1_ds) * strong_label_fraction)
             # strong labels are the ground truth labels
             split_data = train_dataset.train_test_split(test_size=0.5, seed=seed)
             first_half, _ = split_data["train"], split_data["test"]
-            strong_labels = first_half.select(range(int(len(first_half) * strong_label_fraction)))
+            strong_labels = first_half.select(range(n_strong))
             if replace_most_incorrect:
                 def disagreement_score(example):
                     soft_label = np.array(example['soft_label'])
@@ -282,18 +283,18 @@ def main(
                     disagreement = np.sum(np.abs(soft_label - hard_label))
                     return {'disagreement': disagreement}
                 train1_ds = train1_ds.map(disagreement_score, batched=False)
-                train1_ds = train1_ds.sort('disagreement', reverse=True)
-                weak_labels = train1_ds[:int(len(train1_ds) * (1 - strong_label_fraction))]
+                train1_ds = train1_ds.sort('disagreement', reverse=False) # sort from least disagreement to most
+                weak_labels = train1_ds.select(range(n_weak)) # select the least disagreement examples
             elif replace_least_confident:
                 def confidence_score(example):
                     soft_label = np.array(example['soft_label'])
                     confidence = np.max(soft_label)
                     return {'confidence': confidence}
                 train1_ds = train1_ds.map(confidence_score, batched=False)
-                train1_ds = train1_ds.sort('confidence', reverse=False)
-                weak_labels = train1_ds[:int(len(train1_ds) * (1 - strong_label_fraction))]
+                train1_ds = train1_ds.sort('confidence', reverse=True) # sort from most confident to least
+                weak_labels = train1_ds.select(range(n_weak)) # select the most confident examples
             else:
-                weak_labels = train1_ds.select(range(int(len(train1_ds) * (1 - strong_label_fraction))))
+                weak_labels = train1_ds.select(range(n_weak))
             print("len(strong_labels):", len(strong_labels), "len(weak_labels):", len(weak_labels))
             if strong_after_weak:
                 train1_ds = concatenate_datasets([weak_labels, strong_labels])
@@ -309,6 +310,12 @@ def main(
         config["weak_model_size"] = weak_model_config["model_size"]
         config["strong_label_fraction"] = strong_label_fraction
         config["shuffle_strong_labels"] = shuffle_strong_labels
+        if strong_after_weak:
+            config["strong_after_weak"] = strong_after_weak
+        if replace_least_confident:
+            config["replace_least_confident"] = replace_least_confident
+        if replace_most_incorrect:
+            config["replace_most_incorrect"] = replace_most_incorrect
         config_name = get_config_foldername(config)
         config["weak_model"] = weak_model_config
 
