@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 import fire
 import numpy as np
 import torch
-from datasets import load_dataset, load_from_disk
+from datasets import load_dataset, load_from_disk, concatenate_datasets
 
 import weak_to_strong.logger as logger
 from weak_to_strong.common import get_tokenizer
@@ -165,6 +165,7 @@ def main(
     # If you pass neither, we will train on ground truth.
     weak_model_size: Optional[str] = None,
     weak_labels_path: Optional[str] = None,
+    strong_label_fraction: Optional[float] = 0,
     sweep_subfolder: str = "default",
     # Set to a very large value so that by default we don't do any intermediate evals but
     # still do final evals (which requires eval_every to be set to a non-zero, non-None value)
@@ -178,6 +179,7 @@ def main(
     assert (
         weak_model_size is None or weak_labels_path is None
     ), "Can't pass both weak_model_size and weak_labels_path"
+    assert strong_label_fraction >= 0 and strong_label_fraction <= 1, "Invalid strong_label_fraction"
     model_config = MODELS_DICT[model_size]
 
     use_default_lr = False
@@ -257,7 +259,17 @@ def main(
         train2_ds = None
 
         weak_model_config = json.load(open(weak_labels_path.replace("weak_labels", "config.json")))
+        # mix in strong labels at the desired fraction
+        if strong_label_fraction > 0:
+            # strong labels are the ground truth labels
+            split_data = train_dataset.train_test_split(test_size=0.5, seed=seed)
+            first_half, _ = split_data["train"], split_data["test"]
+            strong_labels = first_half.select(range(int(len(first_half) * strong_label_fraction)))
+            weak_labels = train1_ds.select(range(int(len(train1_ds) * (1 - strong_label_fraction))))
+            train1_ds = concatenate_datasets([strong_labels, weak_labels])
+            train1_ds = train1_ds.shuffle(seed=seed)
         config["weak_model_size"] = weak_model_config["model_size"]
+        config["strong_label_fraction"] = strong_label_fraction
         config_name = get_config_foldername(config)
         config["weak_model"] = weak_model_config
 
