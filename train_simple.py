@@ -166,6 +166,7 @@ def main(
     weak_model_size: Optional[str] = None,
     weak_labels_path: Optional[str] = None,
     strong_label_fraction: Optional[float] = 0,
+    shuffle_strong_labels: Optional[bool] = True,
     sweep_subfolder: str = "default",
     # Set to a very large value so that by default we don't do any intermediate evals but
     # still do final evals (which requires eval_every to be set to a non-zero, non-None value)
@@ -255,10 +256,11 @@ def main(
             result = subprocess.run(sync_command_list, check=True)
             if result.returncode != 0:
                 raise RuntimeError(f"Sync command failed with return code {result.returncode}")
+        print("Weak labels path:", weak_labels_path)
         train1_ds = load_from_disk(weak_labels_path)
         train2_ds = None
 
-        weak_model_config = json.load(open(weak_labels_path.replace("weak_labels", "config.json")))
+        weak_model_config = json.load(open(weak_labels_path.replace("weak_labels", "config_w2sg.json")))
         # mix in strong labels at the desired fraction
         if strong_label_fraction > 0:
             # strong labels are the ground truth labels
@@ -267,9 +269,16 @@ def main(
             strong_labels = first_half.select(range(int(len(first_half) * strong_label_fraction)))
             weak_labels = train1_ds.select(range(int(len(train1_ds) * (1 - strong_label_fraction))))
             train1_ds = concatenate_datasets([strong_labels, weak_labels])
-            train1_ds = train1_ds.shuffle(seed=seed)
+            if shuffle_strong_labels:
+                print("Shuffling strong labels")
+                train1_ds = train1_ds.shuffle(seed=seed)
+            else:
+                print("Not shuffling strong labels")
+        # print first 10 elements of the dataset
+        print(train1_ds[:10])
         config["weak_model_size"] = weak_model_config["model_size"]
         config["strong_label_fraction"] = strong_label_fraction
+        config["shuffle_strong_labels"] = shuffle_strong_labels
         config_name = get_config_foldername(config)
         config["weak_model"] = weak_model_config
 
@@ -312,15 +321,19 @@ def main(
     if weak_ds is not None:
         weak_ds.save_to_disk(save_path + "/" + "weak_labels")
 
-    acc = np.mean([x["acc"] for x in test_results])
-    res_dict = {"accuracy": acc}
-    print("accuracy:", acc)
+    accs = [x["acc"] for x in test_results]
+    acc = np.mean(accs)
+    stderr = np.std(accs) / np.sqrt(len(accs))
+    res_dict = {"accuracy": acc, "stderr": stderr}
+    print("accuracy:", acc, "+/-", stderr)
 
-    with open(os.path.join(save_path, f"config.json"), "w") as f:
-        json.dump(config, f, indent=2)
+    if not os.path.exists(os.path.join(save_path, "config_w2sg.json")):
+        with open(os.path.join(save_path, f"config_w2sg.json"), "w") as f:
+            json.dump(config, f, indent=2)
 
-    with open(os.path.join(save_path, f"results_summary.json"), "w") as f:
-        json.dump(res_dict, f, indent=2)
+    if not os.path.exists(os.path.join(save_path, "results_summary.json")):
+        with open(os.path.join(save_path, f"results_summary.json"), "w") as f:
+            json.dump(res_dict, f, indent=2)
 
     if sync_command is not None:
         print("Syncing results to remote storage...")
