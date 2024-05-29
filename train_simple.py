@@ -167,6 +167,9 @@ def main(
     weak_labels_path: Optional[str] = None,
     strong_label_fraction: Optional[float] = 0,
     shuffle_strong_labels: Optional[bool] = True,
+    strong_after_weak: Optional[bool] = False,
+    replace_least_confident: Optional[bool] = False,
+    replace_most_incorrect: Optional[bool] = False,
     sweep_subfolder: str = "default",
     # Set to a very large value so that by default we don't do any intermediate evals but
     # still do final evals (which requires eval_every to be set to a non-zero, non-None value)
@@ -185,6 +188,8 @@ def main(
     ), "Can't pass both weak_model_size and weak_labels_path"
     assert strong_label_fraction >= 0 and strong_label_fraction <= 1, "Invalid strong_label_fraction"
     model_config = MODELS_DICT[model_size]
+    assert not (shuffle_strong_labels and strong_after_weak), "Can't both shuffle and place strong labels after weak"
+    assert not (replace_least_confident and replace_most_incorrect), "Can't pass both replace_least_confident and replace_most_incorrect"
 
     use_default_lr = False
     if lr is None:
@@ -270,9 +275,30 @@ def main(
             split_data = train_dataset.train_test_split(test_size=0.5, seed=seed)
             first_half, _ = split_data["train"], split_data["test"]
             strong_labels = first_half.select(range(int(len(first_half) * strong_label_fraction)))
-            weak_labels = train1_ds.select(range(int(len(train1_ds) * (1 - strong_label_fraction))))
+            if replace_most_incorrect:
+                def disagreement_score(example):
+                    soft_label = np.array(example['soft_label'])
+                    hard_label = np.array([1, 0] if example['hard_label'] == 0 else [0, 1])
+                    disagreement = np.sum(np.abs(soft_label - hard_label))
+                    return {'disagreement': disagreement}
+                train1_ds = train1_ds.map(disagreement_score, batched=False)
+                train1_ds = train1_ds.sort('disagreement', reverse=True)
+                weak_labels = train1_ds[:int(len(train1_ds) * (1 - strong_label_fraction))]
+            elif replace_least_confident:
+                def confidence_score(example):
+                    soft_label = np.array(example['soft_label'])
+                    confidence = np.max(soft_label)
+                    return {'confidence': confidence}
+                train1_ds = train1_ds.map(confidence_score, batched=False)
+                train1_ds = train1_ds.sort('confidence', reverse=False)
+                weak_labels = train1_ds[:int(len(train1_ds) * (1 - strong_label_fraction))]
+            else:
+                weak_labels = train1_ds.select(range(int(len(train1_ds) * (1 - strong_label_fraction))))
             print("len(strong_labels):", len(strong_labels), "len(weak_labels):", len(weak_labels))
-            train1_ds = concatenate_datasets([strong_labels, weak_labels])
+            if strong_after_weak:
+                train1_ds = concatenate_datasets([weak_labels, strong_labels])
+            else:
+                train1_ds = concatenate_datasets([strong_labels, weak_labels])
             if shuffle_strong_labels:
                 print("Shuffling strong labels")
                 train1_ds = train1_ds.shuffle(seed=seed)
