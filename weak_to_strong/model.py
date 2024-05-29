@@ -58,3 +58,20 @@ class TransformerWithHead(PreTrainedModel):
             hidden_states = hidden_states.detach()
         logits = self.score(hidden_states)
         return logits
+
+def save_custom_model(model, save_directory):
+    # Save the transformer model
+    model.transformer.save_pretrained(f"{save_directory}/transformer")
+    # Save the classification head separately
+    torch.save(model.score.state_dict(), f"{save_directory}/classification_head.pt")
+
+def load_custom_model(load_directory, name, linear_probe=False):
+    # Load the transformer model
+    transformer = AutoModelForCausalLM.from_pretrained(f"{load_directory}/transformer")
+    # Initialize the custom model
+    model = TransformerWithHead(name, linear_probe=linear_probe)
+    model.transformer = transformer.transformer
+    model.lm = transformer
+    # Load the classification head
+    model.score.load_state_dict(torch.load(f"{load_directory}/classification_head.pt"))
+    return model

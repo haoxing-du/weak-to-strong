@@ -15,7 +15,7 @@ import weak_to_strong.logger as logger
 from weak_to_strong.common import clear_mem
 from weak_to_strong.eval import eval_model_acc
 from weak_to_strong.loss import xent_loss
-from weak_to_strong.model import TransformerWithHead
+from weak_to_strong.model import TransformerWithHead, save_custom_model, load_custom_model
 
 
 @dataclass
@@ -269,8 +269,9 @@ def train_and_save_model(
         if save_path:
             # Note: If the model is wrapped by DataParallel, we need to unwrap it before saving
             (model if hasattr(model, "save_pretrained") else model.module).save_pretrained(
-                save_path
+                save_path, safe_serialization=False,
             )
+            # save_custom_model(model, save_path)
             print("saved", save_path)
 
     inference_results = None
