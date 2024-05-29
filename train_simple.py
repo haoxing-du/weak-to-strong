@@ -176,6 +176,9 @@ def main(
     # this is per device!
     if minibatch_size_per_device is None:
         minibatch_size_per_device = 1
+    if model_size == 'gpt2-xl':
+        minibatch_size_per_device = 8
+        print("Changing minibatch_size_per_device to 16 for gpt2-xl")
     assert ds_name in VALID_DATASETS, f"Unknown dataset {ds_name} not in {VALID_DATASETS}"
     assert (
         weak_model_size is None or weak_labels_path is None
@@ -268,6 +271,7 @@ def main(
             first_half, _ = split_data["train"], split_data["test"]
             strong_labels = first_half.select(range(int(len(first_half) * strong_label_fraction)))
             weak_labels = train1_ds.select(range(int(len(train1_ds) * (1 - strong_label_fraction))))
+            print("len(strong_labels):", len(strong_labels), "len(weak_labels):", len(weak_labels))
             train1_ds = concatenate_datasets([strong_labels, weak_labels])
             if shuffle_strong_labels:
                 print("Shuffling strong labels")
@@ -275,7 +279,7 @@ def main(
             else:
                 print("Not shuffling strong labels")
         # print first 10 elements of the dataset
-        print(train1_ds[:10])
+        print("train1_ds[:10] ", train1_ds[:10])
         config["weak_model_size"] = weak_model_config["model_size"]
         config["strong_label_fraction"] = strong_label_fraction
         config["shuffle_strong_labels"] = shuffle_strong_labels
