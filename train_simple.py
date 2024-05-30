@@ -180,8 +180,8 @@ def main(
     if minibatch_size_per_device is None:
         minibatch_size_per_device = 1
     if model_size == 'gpt2-xl':
-        minibatch_size_per_device = 8
-        print("Changing minibatch_size_per_device to 16 for gpt2-xl")
+        minibatch_size_per_device = 1
+        print("Changing minibatch_size_per_device to 1 for gpt2-xl")
     assert ds_name in VALID_DATASETS, f"Unknown dataset {ds_name} not in {VALID_DATASETS}"
     assert (
         weak_model_size is None or weak_labels_path is None
