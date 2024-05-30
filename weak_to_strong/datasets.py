@@ -113,7 +113,7 @@ register_dataset(
 
 def format_anthropic_hh(ex, rng):
     hard_label = int(rng.random() < 0.5)
-    txt = ex["chosen"] if hard_label else ex["rejected"]
+    txt = ex["chosen"] + "\n\n" + ex["rejected"] if hard_label else ex["rejected"] + "\n\n" + ex["chosen"]
     return dict(txt=txt, hard_label=hard_label)
 
 
