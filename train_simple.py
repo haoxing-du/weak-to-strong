@@ -271,7 +271,7 @@ def main(
         weak_model_config = json.load(open(weak_labels_path.replace("weak_labels", "config_w2sg.json")))
         # mix in strong labels at the desired fraction
         if strong_label_fraction > 0:
-            n_strong, n_weak = int(len(train1_ds) * (1 - strong_label_fraction)), int(len(train1_ds) * strong_label_fraction)
+            n_strong, n_weak = int(len(train1_ds) * strong_label_fraction), int(len(train1_ds) * (1 - strong_label_fraction))
             # strong labels are the ground truth labels
             split_data = train_dataset.train_test_split(test_size=0.5, seed=seed)
             first_half, _ = split_data["train"], split_data["test"]
